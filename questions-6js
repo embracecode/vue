@@ -1,0 +1,15 @@
+
+
+// proxyRefs 用例
+import { reactive, effect, proxyRefs } from 'vue'
+const state = reactive({
+    name: 'John',
+    age: 20
+})
+let proxy = proxyRefs(state)
+proxy.age = 30 // 当访问age时  会做一层代理 相当于给proxy.age.value 赋值
+
+
+effect(() => {
+    console.log(proxy.name, proxy.age);
+})

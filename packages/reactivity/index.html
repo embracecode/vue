@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <div id="app"></div>
+    <script type="module">
+        // import { 
+        //     reactive,
+        //     effect,
+        //     ref,
+        //     computed,
+        //     watch
+        // } from '/node_modules/vue/dist/vue.esm-browser.js'
+
+
+        import {
+            reactive, 
+            effect,
+            ref,
+            toRef,
+            toRefs,
+            proxyRefs,
+            computed,
+            watch,
+            watchEffect,
+        } from './dist/reactivity.js'
+        let obj = {
+            name: 'John',
+            age: 25,
+            flag: true,
+            address: {
+                city: 'New York',
+            }
+        }
+        let objReactive = reactive(obj)
+        let refvalue = ref('Hello')
+        
+    //    const unwatch = watch(() => objReactive.name, (newValue, oldValue) => {
+    //         console.log('newValue:', newValue, 'oldValue:', oldValue)
+    //     }, {
+    //         deep: false,
+    //         immediate: true 
+    //     })
+        // unwatch()
+        // watchEffect(() => {
+        //     console.log(objReactive.name + '|' + objReactive.age)
+        // })
+
+        // setTimeout(() => {  
+        //     objReactive.name = 'Mike'
+        //     objReactive.name = 'Tom'
+        // }, 2000)
+        
+        
+        function getData(timeout) {
+            return new Promise((resolve, reject) => {
+                setTimeout(() => {
+                    console.log('测试执行次数');
+                    
+                    resolve(timeout)
+                }, timeout)
+            })
+        }
+        
+        let timeout = 3000
+        watch(refvalue, async (newValue, oldValue, onCleanup) => {
+            let flag = true
+            timeout -=1000
+            onCleanup(() => {
+                flag = false
+            })
+            let r = await getData(timeout)
+            
+            if (flag) {
+                app.innerHTML = r
+            }
+            
+        }, {
+            flush: 'sync'
+        })
+
+        setTimeout(() => {
+            refvalue.value = 'World'
+            refvalue.value = 'Vue3'
+        }, 1000)
+    </script>
+</body>
+</html>

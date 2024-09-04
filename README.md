@@ -1,5 +1,11 @@
 ### vue 响应式模块及依赖收集的源码实现
 
+.
+├── README.md
+此项目是以包的形式运行 导入所需要的包在 effect 副作用函数中使用即可
+运行此项目在 packages/reactivity/index.html live server 此页面
+.
+
 ------ 采用 monorepo 管理项目，目录结构如下：
 
 ```

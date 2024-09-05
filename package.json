@@ -7,13 +7,15 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.js reactivity -f esm",
-    "runtimedom": "node scripts/dev.js runtime-dom -f esm"
+    "runtimedom": "node scripts/dev.js runtime-dom -f esm",
+    "runtimecore": "node scripts/dev.js runtime-core -f esm"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@vue/reactivity": "^3.4.32",
+    "@vue/runtime-core": "^3.5.1",
     "@vue/shared": "^3.4.32",
     "vue": "^3.5.0"
   },

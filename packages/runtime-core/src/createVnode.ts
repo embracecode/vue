@@ -5,6 +5,10 @@ export function isVNode(vnode: any) {
     return vnode && vnode.__v_isVNode
 }
 
+export function isSameVnode(vnode1: any, vnode2: any) { 
+    return vnode1.type === vnode2.type && vnode1.key === vnode2.key
+}
+
 export function createVNode(type: any, props: any, children?: any) { 
     const shapeFlag = isString(type) ? ShapeFlags.ELEMENT : 0 
     const vnode = { 

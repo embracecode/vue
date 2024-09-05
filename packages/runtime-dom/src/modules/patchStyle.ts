@@ -9,8 +9,10 @@ export default function patchStyle(el, prevValue, nextValue) {
     if (prevValue) {
         for (const key in prevValue) { 
             //看以前的属性是否存在于新样式中，如果不存在，则移除
-            if (nextValue[key] == null) {
-                style[key] = ""; // 移除旧样式
+            if (nextValue) {
+                if (nextValue[key] == null) {
+                    style[key] = ""; // 移除旧样式
+                }
             }
         }
     }

@@ -1,10 +1,13 @@
 import { ShapeFlags } from "@vue/shared"
 import { isSameVnode, Text } from "./createVnode"
 import { getSequence } from "./seq"
+import { Fragment } from "@vue/runtime-core"
+import { reactive, ReactiveEffect } from "@vue/reactivity"
+import { queueJob } from "./scheduler"
+import { hasOwn } from "@vue/shared"
 
 export function createRenderer(renderOptions) {
     // core中不关心如何渲染
-
     const {
         insert: hostInsert,
         remove: hostRemove,
@@ -54,6 +57,125 @@ export function createRenderer(renderOptions) {
 
         return el
     }
+
+
+    // 初始化组件的props 传入 实例 和 所有属性
+    const initProps = (componentInstance, rawProps) => { 
+        const props = {}
+        const attrs = {}
+        const propsOptions = componentInstance.propsOptions || {} // 用户在组件中定义的
+        if (rawProps) {
+            for (let key in rawProps) {
+                const value = rawProps[key]
+                if (key in propsOptions) {
+                    props[key] = value 
+                } else {
+                    attrs[key] = value
+                }
+            }
+        }
+        componentInstance.props = reactive(props) // props不需要深度响应  源码中是shallowReactive 因为组件不能更改属性值
+        componentInstance.attrs = attrs
+    }
+
+    // 组件的挂载  没有老节点  直接渲染
+    const mountComponent = (newVnode, container, anchor) => {
+        // 组件可以基于自己的状态重新渲染， 组件的type 是个对象 包含组件信息
+        const { data = () => { }, render, props: propsOptions = {} } = newVnode.type
+        
+        const state = reactive(data()) // 组件的状态
+
+
+        // 创建一个组件的实例  用来判断是第一次渲染还是更新渲染
+        const componentInstance = {
+            state, // 组件的状态
+            vnode: newVnode, // 组件的虚拟节点
+            subTree: null, // 组件的子树
+            isMounted: false, // 组件是否已经挂载
+            update: null, // 组件的更新函数
+            props: {}, // 组件用defineProps声明的属性
+            attrs: {}, // 组件的属性
+            propsOptions, // 组件的propsOptions
+            component: null, // 组件的实例
+            proxy: null, //代理对象 让用户方便访问 propx attrs data等
+        }
+        newVnode.component = componentInstance
+
+        const publicProperty = {
+            $attrs: (instance) => instance.attrs,
+            //...
+        }
+
+        componentInstance.proxy = new Proxy(componentInstance, {
+            get(target, key) {
+                const { state, props } = target
+                if (state && hasOwn(state, key)) {
+                    return state[key]
+                } else if (props && hasOwn(props, key)) {
+                    return props[key]
+                }
+                const getter = publicProperty[key]
+                if (getter) {
+                    
+                    
+                    return getter(target)
+                }
+            },
+            set(target, key, value) { 
+                const { state, props } = target
+                if (state && hasOwn(state, key)) {
+                    state[key] = value
+                } else if (props && hasOwn(props, key)) {
+                    // 可以修改属性中的嵌套属性 内部不会报错 但是不合法
+                    // props[key] = value
+                    console.warn(`props is readonly.`)
+                    return false
+                }
+                return true
+            },
+        })
+
+
+        // 元素更新 nextNewVnode.el = newVnode.el
+        // 组件更新 nextNewVnode.component.subTree.el = newVnode.component.subTree.el
+
+
+        // 根据propsOptions 区分props 和 attrs
+
+        initProps(componentInstance, newVnode.props) // 初始化props
+
+        // 组件的渲染函数 初始化的时候会调用这个渲染函数 在组件更新的时候也会掉这个渲染函数
+        const componentRenderUpdateFn = () => {
+            if (!componentInstance.isMounted) {
+                // 第一个是this 指向  第二个参数是传递给组件的render函数的state
+                const subTree = render.call(componentInstance.proxy, componentInstance.proxy)
+                componentInstance.subTree = subTree
+                // 要在这里做区分 是第一次渲染 还是更新渲染
+                patch(null, subTree, container, anchor)
+                componentInstance.isMounted = true
+            } else {
+                // 基于状态变更更新组件
+                const subTree = render.call(componentInstance.proxy, componentInstance.proxy)
+                patch(componentInstance.subTree, subTree, container, anchor)
+                componentInstance.subTree = subTree
+            }
+        }
+
+        const update = (componentInstance.update = () => { 
+            effect.run()
+        })
+
+        const effect = new ReactiveEffect(componentRenderUpdateFn, () => queueJob(update))
+
+        update()
+
+    }
+
+    const patchComponent = (oldVnode, newVnode, container, anchor) => {
+        // 组件的更新
+        patch(oldVnode, newVnode, container, anchor)
+    }
+
     // 处理元素
     const processElement = (oldVnode, newVnode, container, anchor) => { 
         // 第一次做一个初始化操作
@@ -78,6 +200,26 @@ export function createRenderer(renderOptions) {
             if (oldVnode.children !== newVnode.children) { 
                 hostSetText(el, newVnode.children)
             }
+        }
+    }
+
+    // 处理Fragment
+    const processFragment = (oldVnode, newVnode, container) => { 
+        if (oldVnode == null) {
+            mountChildren(newVnode.children, container)
+        } else {
+            patchChildren(oldVnode, newVnode, container)
+        }
+    }
+
+    // 处理组件
+    const processComponent = (oldVnode, newVnode, container, anchor) => { 
+        if (oldVnode == null) {
+            // 组件的渲染
+            mountComponent(newVnode, container, anchor)
+        } else {
+            // 组件的更新
+            // patchComponent(oldVnode, newVnode, container, anchor)
         }
     }
 
@@ -116,7 +258,7 @@ export function createRenderer(renderOptions) {
             i++
         }
         // oldend到c的位置终止 newend到e的位置终止2 3 2
-        console.log('oldend', oldend, 'newend', newend, 'i', i);
+        // console.log('oldend', oldend, 'newend', newend, 'i', i);
 
         // [a, b, c]
         // [d, e, b, c]
@@ -322,14 +464,22 @@ export function createRenderer(renderOptions) {
             oldVnode = null // 会执行后续n2 的初始化操作
         }
 
-        const { type } = newVnode
+        const { type, shapeFlag } = newVnode
         switch (type) { 
             case Text:
                 processText(oldVnode, newVnode,container)
-                
+                break
+            case Fragment:
+                processFragment(oldVnode, newVnode, container) // 对fragment的处理
                 break
             default:
-                processElement(oldVnode, newVnode, container, anchor) // 对元素的处理
+                if (shapeFlag & ShapeFlags.ELEMENT) {
+                    processElement(oldVnode, newVnode, container, anchor) // 对元素的处理
+                } else if (shapeFlag & ShapeFlags.COMPONENT) { 
+                    // 组件的处理 vue3中函数式组件已经废弃 没有性能节约 还能用（不建议用）
+                    processComponent(oldVnode, newVnode, container, anchor)
+                }
+                
                 // 文本节点的比较
         }
 
@@ -345,13 +495,16 @@ export function createRenderer(renderOptions) {
     }
 
     const unmount = (vnode) => { 
-        hostRemove(vnode.el)
+        if (vnode.type === Fragment) {
+            unmountChildren(vnode.children)
+        } else {
+            hostRemove(vnode.el)
+        }
+        
     }
 
     // 多次调用render 会进行虚拟节点的比较 在进行更新
     const render = (vnode, container) => {
-        console.log(container, '**************');
-        
         if (vnode == null) { // 要移除当前容器中的dom元素
             if (container._vnode) {
                 

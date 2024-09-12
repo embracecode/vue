@@ -5,7 +5,7 @@ import { nodeOps } from './nodeOps'
 
 import patchProp from './patchProps'
 
-import{ createRenderer } from '@vue/runtime-core'
+import { createRenderer } from '@vue/runtime-core'
 
 const renderOptions = Object.assign({ patchProp }, nodeOps)
 

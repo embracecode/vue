@@ -2,9 +2,9 @@ import { ShapeFlags } from "@vue/shared"
 import { isSameVnode, Text } from "./createVnode"
 import { getSequence } from "./seq"
 import { Fragment } from "@vue/runtime-core"
-import { reactive, ReactiveEffect } from "@vue/reactivity"
+import { ReactiveEffect } from "@vue/reactivity"
 import { queueJob } from "./scheduler"
-import { hasOwn } from "@vue/shared"
+import { createComponentInstance, setupComponent } from "./component"
 
 export function createRenderer(renderOptions) {
     // core中不关心如何渲染
@@ -58,92 +58,14 @@ export function createRenderer(renderOptions) {
         return el
     }
 
-
-    // 初始化组件的props 传入 实例 和 所有属性
-    const initProps = (componentInstance, rawProps) => { 
-        const props = {}
-        const attrs = {}
-        const propsOptions = componentInstance.propsOptions || {} // 用户在组件中定义的
-        if (rawProps) {
-            for (let key in rawProps) {
-                const value = rawProps[key]
-                if (key in propsOptions) {
-                    props[key] = value 
-                } else {
-                    attrs[key] = value
-                }
-            }
-        }
-        componentInstance.props = reactive(props) // props不需要深度响应  源码中是shallowReactive 因为组件不能更改属性值
-        componentInstance.attrs = attrs
+    const updateComponentPreRender = (instance, next) => { 
+        instance.next = null
+        instance.vnode = next
+        updateProps(instance, instance.props, next.props)
     }
 
-    // 组件的挂载  没有老节点  直接渲染
-    const mountComponent = (newVnode, container, anchor) => {
-        // 组件可以基于自己的状态重新渲染， 组件的type 是个对象 包含组件信息
-        const { data = () => { }, render, props: propsOptions = {} } = newVnode.type
-        
-        const state = reactive(data()) // 组件的状态
-
-
-        // 创建一个组件的实例  用来判断是第一次渲染还是更新渲染
-        const componentInstance = {
-            state, // 组件的状态
-            vnode: newVnode, // 组件的虚拟节点
-            subTree: null, // 组件的子树
-            isMounted: false, // 组件是否已经挂载
-            update: null, // 组件的更新函数
-            props: {}, // 组件用defineProps声明的属性
-            attrs: {}, // 组件的属性
-            propsOptions, // 组件的propsOptions
-            component: null, // 组件的实例
-            proxy: null, //代理对象 让用户方便访问 propx attrs data等
-        }
-        newVnode.component = componentInstance
-
-        const publicProperty = {
-            $attrs: (instance) => instance.attrs,
-            //...
-        }
-
-        componentInstance.proxy = new Proxy(componentInstance, {
-            get(target, key) {
-                const { state, props } = target
-                if (state && hasOwn(state, key)) {
-                    return state[key]
-                } else if (props && hasOwn(props, key)) {
-                    return props[key]
-                }
-                const getter = publicProperty[key]
-                if (getter) {
-                    
-                    
-                    return getter(target)
-                }
-            },
-            set(target, key, value) { 
-                const { state, props } = target
-                if (state && hasOwn(state, key)) {
-                    state[key] = value
-                } else if (props && hasOwn(props, key)) {
-                    // 可以修改属性中的嵌套属性 内部不会报错 但是不合法
-                    // props[key] = value
-                    console.warn(`props is readonly.`)
-                    return false
-                }
-                return true
-            },
-        })
-
-
-        // 元素更新 nextNewVnode.el = newVnode.el
-        // 组件更新 nextNewVnode.component.subTree.el = newVnode.component.subTree.el
-
-
-        // 根据propsOptions 区分props 和 attrs
-
-        initProps(componentInstance, newVnode.props) // 初始化props
-
+    const setupRenderEffect = (componentInstance, container, anchor) => { 
+        const { render } = componentInstance
         // 组件的渲染函数 初始化的时候会调用这个渲染函数 在组件更新的时候也会掉这个渲染函数
         const componentRenderUpdateFn = () => {
             if (!componentInstance.isMounted) {
@@ -155,6 +77,13 @@ export function createRenderer(renderOptions) {
                 componentInstance.isMounted = true
             } else {
                 // 基于状态变更更新组件
+                const { next } = componentInstance
+                // 属性插槽有更新 
+                if (next) {
+                    // 在渲染之前更新组件
+                    updateComponentPreRender(componentInstance, next)
+                }
+                // 状态更新
                 const subTree = render.call(componentInstance.proxy, componentInstance.proxy)
                 patch(componentInstance.subTree, subTree, container, anchor)
                 componentInstance.subTree = subTree
@@ -168,14 +97,64 @@ export function createRenderer(renderOptions) {
         const effect = new ReactiveEffect(componentRenderUpdateFn, () => queueJob(update))
 
         update()
-
     }
 
-    const patchComponent = (oldVnode, newVnode, container, anchor) => {
+    // 组件的挂载  没有老节点  直接渲染
+    const mountComponent = (newVnode, container, anchor) => {
+        // 第一步先创建组件的实例
+        const componentInstance = (newVnode.component = createComponentInstance(newVnode))
+        
+        // 第二步给实例的属性赋值  
+        setupComponent(componentInstance)
+        // 第三步创建一个effect
+        setupRenderEffect(componentInstance, container, anchor)
+    }
+    const updateComponent = (oldVnode, newVnode) => {
         // 组件的更新
-        patch(oldVnode, newVnode, container, anchor)
+        const instance = (newVnode.component = oldVnode.component) // 复用老的组件实例
+        if (shouldComponentUpdate(oldVnode, newVnode)) {        
+            instance.next = newVnode  // 如果调用update方法有next属性 说明是属性更新 插槽更新（没有则是状态（data）更新）
+            instance.update() // 让更新逻辑统一
+        }
     }
+    const shouldComponentUpdate = (oldVnode, newVnode) => { 
+        const { props: preProps, children: preChildren } = oldVnode
+        const { props: nextProps, children: nextChildren } = newVnode
+        if (preChildren || nextChildren) return true // 有插槽直接更新 
+        if (preProps === nextProps) return false // 无变化
 
+        // 如果属性不一致则需要更新
+        return hasPropsChanged(preProps, nextProps) // 有属性变化
+    }
+    // 组件的属性是否发生改变
+    const hasPropsChanged = (preProps, nextProps) => { 
+        let nextlenght = Object.keys(nextProps).length
+        let prelenght = Object.keys(preProps).length
+        if (nextlenght !== prelenght) {
+            return true
+        }
+        for (let key in nextProps) {
+            if (nextProps[key] !== preProps[key]) {
+                return true
+            }
+        }
+        return false
+    }
+    // 更新组件的属性
+    const updateProps = (instance, preProps, nextProps) => { 
+        if (hasPropsChanged(preProps, nextProps)) {
+            for (let key in nextProps) {
+                // 用新的覆盖掉老属性
+                instance.props[key] = nextProps[key]
+            }
+            for (let key in instance.props) {
+                // 删除老的多余属性
+                if (!(key in nextProps)) {
+                    delete instance.props[key]
+                }
+            }
+        }
+    }
     // 处理元素
     const processElement = (oldVnode, newVnode, container, anchor) => { 
         // 第一次做一个初始化操作
@@ -219,7 +198,7 @@ export function createRenderer(renderOptions) {
             mountComponent(newVnode, container, anchor)
         } else {
             // 组件的更新
-            // patchComponent(oldVnode, newVnode, container, anchor)
+            updateComponent(oldVnode, newVnode)
         }
     }
 
@@ -476,6 +455,8 @@ export function createRenderer(renderOptions) {
                 if (shapeFlag & ShapeFlags.ELEMENT) {
                     processElement(oldVnode, newVnode, container, anchor) // 对元素的处理
                 } else if (shapeFlag & ShapeFlags.COMPONENT) { 
+                    
+                    
                     // 组件的处理 vue3中函数式组件已经废弃 没有性能节约 还能用（不建议用）
                     processComponent(oldVnode, newVnode, container, anchor)
                 }
@@ -495,8 +476,11 @@ export function createRenderer(renderOptions) {
     }
 
     const unmount = (vnode) => { 
+        const { type, shapeFlag } = vnode
         if (vnode.type === Fragment) {
             unmountChildren(vnode.children)
+        } else if (shapeFlag & ShapeFlags.COMPONENT) {
+            unmount(vnode.component.subTree)
         } else {
             hostRemove(vnode.el)
         }

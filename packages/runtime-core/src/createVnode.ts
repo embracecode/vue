@@ -30,6 +30,8 @@ export function createVNode(type: any, props: any, children?: any) {
     if (children) {
         if (isArray(children)) {
             vnode.shapeFlag |= ShapeFlags.ARRAY_CHILDREN  // ( vnode.shapeFlag = vnode.shapeFlage | ShapeFlags.ARRAY_CHILDREN )
+        } else if (isObject(children)) { // 组件的孩子（插槽）
+            vnode.shapeFlag |= ShapeFlags.SLOTS_CHILDREN  // ( vnode.shapeFlag = vnode.shapeFlage | ShapeFlags.SLOTS_CHILDREN )
         } else {
             children = String(children)
             vnode.shapeFlag |= ShapeFlags.TEXT_CHILDREN  // ( vnode.shapeFlag = vnode.shapeFlage | ShapeFlags.TEXT_CHILDREN )

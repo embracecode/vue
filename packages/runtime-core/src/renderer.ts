@@ -1,7 +1,7 @@
-import { ShapeFlags } from "@vue/shared"
-import { isSameVnode, Text } from "./createVnode"
+import { isRef, ShapeFlags } from "@vue/shared"
+import { createVNode, isSameVnode, Text } from "./createVnode"
 import { getSequence } from "./seq"
-import { Fragment } from "@vue/runtime-core"
+import { Fragment, invokerLifeCycle } from "@vue/runtime-core"
 import { ReactiveEffect } from "@vue/reactivity"
 import { queueJob } from "./scheduler"
 import { createComponentInstance, setupComponent } from "./component"
@@ -21,15 +21,23 @@ export function createRenderer(renderOptions) {
 
     } = renderOptions
 
-    const mountChildren = (children, container) => {
+    const normalize = (children) => {
+        for (let i = 0; i < children.length; i++) { 
+            if (typeof children[i] === 'string' || typeof children[i] === 'number') {
+                children[i] = createVNode(Text, null, String(children[i]))
+            }
+        }
+        return children
+    }
+    const mountChildren = (children, container, parentComponent) => {
+        children = normalize(children)
         for (let i = 0; i < children.length; i++) {
-            const child = children[i]
-            // child可能是纯文本元素
-            patch(null, child, container)
+            let child = children[i]
+            patch(null, child, container, parentComponent)
         }
     }
 
-    const mountElement = (vnode, container, anchor) => {
+    const mountElement = (vnode, container, anchor, parentComponent) => {
         
         // 这里只需要将虚拟节点渲染为真实节点
         const { type, props, children, shapeFlag } = vnode
@@ -50,7 +58,7 @@ export function createRenderer(renderOptions) {
         if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
             hostSetElementText(el, children)
         } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
-            mountChildren(children, el)
+            mountChildren(children, el, parentComponent)
         } 
         // 将真实节点插入到容器中
         hostInsert(el, container, anchor)
@@ -63,30 +71,57 @@ export function createRenderer(renderOptions) {
         instance.vnode = next
         updateProps(instance, instance.props, next.props)
     }
-
+    // 组件的渲染 区分函数组件和状态组件
+    const renderComponent = (componentInstance) => {
+        const { render, vnode, proxy, props, attrs } = componentInstance
+        if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
+            return render.call(proxy, proxy)
+        } else {
+            // vue3 中不推荐使用函数式组件了 没有任何性能优化
+            return vnode.type(attrs) // functional component
+        }
+    }
     const setupRenderEffect = (componentInstance, container, anchor) => { 
-        const { render } = componentInstance
         // 组件的渲染函数 初始化的时候会调用这个渲染函数 在组件更新的时候也会掉这个渲染函数
         const componentRenderUpdateFn = () => {
+            const { bm, m } = componentInstance
             if (!componentInstance.isMounted) {
+
+                // 组件的生命周期
+                bm && invokerLifeCycle(bm)
                 // 第一个是this 指向  第二个参数是传递给组件的render函数的state
-                const subTree = render.call(componentInstance.proxy, componentInstance.proxy)
+                // const subTree = render.call(componentInstance.proxy, componentInstance.proxy)
+
+                const subTree = renderComponent(componentInstance)
                 componentInstance.subTree = subTree
                 // 要在这里做区分 是第一次渲染 还是更新渲染
-                patch(null, subTree, container, anchor)
+                console.log('setupRenderEffect', componentInstance, componentInstance.isMounted);
+                
+                patch(null, subTree, container, anchor, componentInstance)
                 componentInstance.isMounted = true
+
+                m && invokerLifeCycle(m)
+
+
             } else {
                 // 基于状态变更更新组件
-                const { next } = componentInstance
+                const { next, bu, u } = componentInstance
                 // 属性插槽有更新 
                 if (next) {
                     // 在渲染之前更新组件
                     updateComponentPreRender(componentInstance, next)
                 }
+                // 组件的生命周期 deforeUpdate
+                bu && invokerLifeCycle(bu)
+
                 // 状态更新
-                const subTree = render.call(componentInstance.proxy, componentInstance.proxy)
-                patch(componentInstance.subTree, subTree, container, anchor)
+                // const subTree = render.call(componentInstance.proxy, componentInstance.proxy)
+                const subTree = renderComponent(componentInstance)
+                patch(componentInstance.subTree, subTree, container, anchor, componentInstance)
                 componentInstance.subTree = subTree
+
+
+                u && invokerLifeCycle(u)
             }
         }
 
@@ -100,9 +135,10 @@ export function createRenderer(renderOptions) {
     }
 
     // 组件的挂载  没有老节点  直接渲染
-    const mountComponent = (newVnode, container, anchor) => {
+    const mountComponent = (newVnode, container, anchor, parentComponent) => {
         // 第一步先创建组件的实例
-        const componentInstance = (newVnode.component = createComponentInstance(newVnode))
+        
+        const componentInstance = (newVnode.component = createComponentInstance(newVnode, parentComponent))
         
         // 第二步给实例的属性赋值  
         setupComponent(componentInstance)
@@ -156,14 +192,14 @@ export function createRenderer(renderOptions) {
         }
     }
     // 处理元素
-    const processElement = (oldVnode, newVnode, container, anchor) => { 
+    const processElement = (oldVnode, newVnode, container, anchor, parentComponent) => { 
         // 第一次做一个初始化操作
         if (oldVnode == null) {
 
-            mountElement(newVnode, container, anchor)
+            mountElement(newVnode, container, anchor, parentComponent)
         } else {
             // 是相同节点 比较两个元素的属性
-            patchElement(oldVnode, newVnode, container)
+            patchElement(oldVnode, newVnode, container, parentComponent)
             
         }
     }
@@ -183,19 +219,19 @@ export function createRenderer(renderOptions) {
     }
 
     // 处理Fragment
-    const processFragment = (oldVnode, newVnode, container) => { 
+    const processFragment = (oldVnode, newVnode, container, parentComponent) => { 
         if (oldVnode == null) {
-            mountChildren(newVnode.children, container)
+            mountChildren(newVnode.children, container, parentComponent)
         } else {
-            patchChildren(oldVnode, newVnode, container)
+            patchChildren(oldVnode, newVnode, container, parentComponent)
         }
     }
 
     // 处理组件
-    const processComponent = (oldVnode, newVnode, container, anchor) => { 
+    const processComponent = (oldVnode, newVnode, container, anchor, parentComponent) => { 
         if (oldVnode == null) {
             // 组件的渲染
-            mountComponent(newVnode, container, anchor)
+            mountComponent(newVnode, container, anchor, parentComponent)
         } else {
             // 组件的更新
             updateComponent(oldVnode, newVnode)
@@ -348,10 +384,10 @@ export function createRenderer(renderOptions) {
         }
     }
 
-    const patchChildren = (oldVnode, newVnode, el) => { 
+    const patchChildren = (oldVnode, newVnode, el, parentComponent) => { 
         // text children null  会有三种情况
         const oldChildren = oldVnode.children
-        const newChildren = newVnode.children
+        const newChildren = normalize(newVnode.children)
 
         const prevShapeFlag = oldVnode.shapeFlag
         const newShapeFlag = newVnode.shapeFlag
@@ -407,7 +443,7 @@ export function createRenderer(renderOptions) {
                 }
                 // 6.老的是文本，新的是数组，进行挂载
                 if (newShapeFlag & ShapeFlags.ARRAY_CHILDREN) {
-                    mountChildren(newChildren, el)
+                    mountChildren(newChildren, el, parentComponent)
                 }
 
             }
@@ -417,7 +453,7 @@ export function createRenderer(renderOptions) {
 
     
 
-    const patchElement = (oldVnode, newVnode, container) => { 
+    const patchElement = (oldVnode, newVnode, container, parentComponent) => { 
         // 1.比较元素的差异 需要服用原来的dom
         // 2.比较属性和元素的子节点
 
@@ -429,12 +465,11 @@ export function createRenderer(renderOptions) {
         // hostpatchProps 只针对某一个属性 class style event attr
         patchProps(oldProps, newProps, el)
 
-        patchChildren(oldVnode, newVnode, el)
+        patchChildren(oldVnode, newVnode, el, parentComponent)
     }
 
     // 渲染走这里 更新也走这里
-    const patch = (oldVnode, newVnode, container, anchor = null) => {
-        
+    const patch = (oldVnode, newVnode, container, anchor = null, parentComponent = null) => {
         // 核心diff算法，将两个虚拟节点进行比较，并更新DOM树
         if (oldVnode == newVnode) return
         // 直接移除老的dom 初始化新的dom
@@ -443,31 +478,38 @@ export function createRenderer(renderOptions) {
             oldVnode = null // 会执行后续n2 的初始化操作
         }
 
-        const { type, shapeFlag } = newVnode
+        const { type, shapeFlag, ref } = newVnode
         switch (type) { 
             case Text:
                 processText(oldVnode, newVnode,container)
                 break
             case Fragment:
-                processFragment(oldVnode, newVnode, container) // 对fragment的处理
+                processFragment(oldVnode, newVnode, container, parentComponent) // 对fragment的处理
                 break
             default:
                 if (shapeFlag & ShapeFlags.ELEMENT) {
-                    processElement(oldVnode, newVnode, container, anchor) // 对元素的处理
+                    processElement(oldVnode, newVnode, container, anchor, parentComponent) // 对元素的处理
                 } else if (shapeFlag & ShapeFlags.COMPONENT) { 
-                    
-                    
                     // 组件的处理 vue3中函数式组件已经废弃 没有性能节约 还能用（不建议用）
-                    processComponent(oldVnode, newVnode, container, anchor)
+                    processComponent(oldVnode, newVnode, container, anchor, parentComponent)
                 }
-                
                 // 文本节点的比较
         }
 
-        
+        if (ref != null) { 
+            // 判断 newnode 是dom  还是组件 或者是 组件有expose属性
+            setRef(ref, newVnode)
+        }
 
     }
-
+    const setRef = (ref, vnode) => { 
+        let value = vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT
+            ? vnode.component.exposed || vnode.component.proxy
+            : vnode.el
+        if (isRef(ref)) {
+            ref.value = value
+        }
+    }
     const unmountChildren = (children) => { 
         for (let i = 0; i < children.length; i++) {
             const child = children[i]

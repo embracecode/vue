@@ -2,7 +2,8 @@ import { proxyRefs, reactive } from "@vue/reactivity"
 import { hasOwn, isFunction, ShapeFlags } from "@vue/shared"
 
 
-export function createComponentInstance(vnode) {
+export function createComponentInstance(vnode, parentComponent) {
+    // debugger
     // 创建一个组件的实例  用来判断是第一次渲染还是更新渲染
     const componentInstance = {
         data: null, // 组件的状态
@@ -19,7 +20,10 @@ export function createComponentInstance(vnode) {
         proxy: null, //代理对象 让用户方便访问 propx attrs data等
         setupState: {}, // 组件的setup返回值
         exposed: null, // 组件的暴露出去的属性
-
+        parent: parentComponent, // 组件的父组件
+        // 所有的provide 都一样
+        provides: parentComponent ? parentComponent.provides : Object.create(null),
+        // inject: parentComponent ? parentComponent.inject : Object.create(null),
     }
     return componentInstance
 }
@@ -114,7 +118,10 @@ export function setupComponent(instance) {
                 instance.exposed = value
             }
         }
+        setCurrentInstance(instance) // 设置当前实例
         const setupResult = setup(instance.proxy, setupContext)
+        unsetCurrentInstance() // 解除当前实例
+
         if (isFunction(setupResult)) { 
             instance.render = setupResult // 组件的渲染函数
         } else {
@@ -130,6 +137,17 @@ export function setupComponent(instance) {
         } else {
             instance.data = reactive(data.call(instance.proxy)) // 组件的状态  响应式数据
         }
-    }
-    
+    }   
+}
+
+export let currentInstance = null
+
+export const getCurrentInstance = () => currentInstance
+
+export const setCurrentInstance = (instance) => {
+    currentInstance = instance
+}
+
+export const unsetCurrentInstance = () => {
+    currentInstance = null
 }

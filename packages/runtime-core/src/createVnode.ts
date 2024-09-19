@@ -1,4 +1,4 @@
-import { isArray, isObject, isString, ShapeFlags } from "@vue/shared"
+import { isArray, isFunction, isObject, isString, ShapeFlags } from "@vue/shared"
 
 
 export function isVNode(vnode: any) {
@@ -16,7 +16,9 @@ export function createVNode(type: any, props: any, children?: any) {
     const shapeFlag = isString(type)
         ? ShapeFlags.ELEMENT // 元素节点
         : isObject(type)
-        ? ShapeFlags.STATEFUL_COMPONENT  // 组件 
+        ? ShapeFlags.STATEFUL_COMPONENT // 组件
+        : isFunction(type)
+        ? ShapeFlags.FUNCTIONAL_COMPONENT  // 函数式组件 
         : 0 
     const vnode = { 
         type, 
@@ -25,7 +27,8 @@ export function createVNode(type: any, props: any, children?: any) {
         key: props?.key,
         __v_isVNode: true, // diff的key
         el: null, // 虚拟节点对应的真实节点
-        shapeFlag
+        shapeFlag,
+        ref: props?.ref,
     } 
     if (children) {
         if (isArray(children)) {

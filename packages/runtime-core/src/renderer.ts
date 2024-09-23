@@ -489,6 +489,20 @@ export function createRenderer(renderOptions) {
             default:
                 if (shapeFlag & ShapeFlags.ELEMENT) {
                     processElement(oldVnode, newVnode, container, anchor, parentComponent) // 对元素的处理
+                } else if (shapeFlag & ShapeFlags.TELEPORT) {
+                    // teleport 组件的处理
+                    type.process(oldVnode, newVnode, container, anchor, parentComponent, {
+                        mountChildren,
+                        patchChildren,
+                        move(vnode, container, anchor) {
+                            // 此方法可以将组件 或者dom元素移动到指定位置
+                            hostInsert(
+                                vnode.component ? vnode.component.subTree.el : vnode.el,
+                                container,
+                                anchor
+                            )
+                        }
+                    })
                 } else if (shapeFlag & ShapeFlags.COMPONENT) { 
                     // 组件的处理 vue3中函数式组件已经废弃 没有性能节约 还能用（不建议用）
                     processComponent(oldVnode, newVnode, container, anchor, parentComponent)
@@ -523,6 +537,8 @@ export function createRenderer(renderOptions) {
             unmountChildren(vnode.children)
         } else if (shapeFlag & ShapeFlags.COMPONENT) {
             unmount(vnode.component.subTree)
+        } else if (shapeFlag & ShapeFlags.TELEPORT) {
+            vnode.type.remove(vnode, unmountChildren)
         } else {
             hostRemove(vnode.el)
         }

@@ -15,7 +15,6 @@ export function provide(key, value) {
 
 
 export function inject(key, defaultValue = undefined) { 
-    console.log(currentInstance, '/////////');
     
     if (!currentInstance) return // 建立在组件基础上的
     const parentProvides = currentInstance.parent?.provides // 获取父组件的provides

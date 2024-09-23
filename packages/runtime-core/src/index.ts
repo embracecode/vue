@@ -9,6 +9,5 @@ export * from '@vue/reactivity'
 export * from './apiLifeCycle'
 export * from './component'
 export * from './apiProvides'
-
-
+export * from './teleport'
 

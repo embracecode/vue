@@ -21,6 +21,7 @@ export function createComponentInstance(vnode, parentComponent) {
         setupState: {}, // 组件的setup返回值
         exposed: null, // 组件的暴露出去的属性
         parent: parentComponent, // 组件的父组件
+        ctx: {} as any, // 如果是keepalive组件 就将domapi 放到这个属性上
         // 所有的provide 都一样
         provides: parentComponent ? parentComponent.provides : Object.create(null),
         // inject: parentComponent ? parentComponent.inject : Object.create(null),

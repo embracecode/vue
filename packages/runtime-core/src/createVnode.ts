@@ -1,5 +1,5 @@
 import { isArray, isFunction, isObject, isString, ShapeFlags } from "@vue/shared"
-import { isTeleport } from "./teleport"
+import { isTeleport } from "./component/teleport"
 
 
 export function isVNode(vnode: any) {

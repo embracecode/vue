@@ -12,4 +12,5 @@ export * from './apiProvides'
 export * from './component/teleport'
 export * from './component/transition'
 export * from './component/keepalive'
+export * from './defineAsyncComponent'
 

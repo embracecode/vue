@@ -13,7 +13,7 @@ export function isSameVnode(vnode1: any, vnode2: any) {
     return vnode1.type === vnode2.type && vnode1.key === vnode2.key
 }
 
-export function createVNode(type: any, props: any, children?: any) { 
+export function createVNode(type: any, props: any, children?: any, patchFlag?) { 
     const shapeFlag = isString(type)
         ? ShapeFlags.ELEMENT // 元素节点
         : isTeleport(type) // 传送门节点
@@ -32,7 +32,16 @@ export function createVNode(type: any, props: any, children?: any) {
         el: null, // 虚拟节点对应的真实节点
         shapeFlag,
         ref: props?.ref,
+        patchFlag,
     } 
+
+
+    // 靶向更新
+    if (currentBlock && patchFlag > 0) {
+        currentBlock.push(vnode)
+    }
+
+
     if (children) {
         if (isArray(children)) {
             vnode.shapeFlag |= ShapeFlags.ARRAY_CHILDREN  // ( vnode.shapeFlag = vnode.shapeFlage | ShapeFlags.ARRAY_CHILDREN )
@@ -46,3 +55,36 @@ export function createVNode(type: any, props: any, children?: any) {
 
     return vnode
 }
+
+let currentBlock = null
+export function openBlock(block) { 
+    currentBlock = []
+}
+
+export function closeBlock() { 
+    currentBlock = null
+}
+
+export function setupBlock(vnode) { 
+    vnode.dynamicChildren = currentBlock // 当前elementBlock 会收集子节点 用当前的block收集
+    closeBlock()
+    return vnode
+}
+
+// block 有收集虚拟节点的功能
+export function createElementBlock(type, props, children, patchFlag?) { 
+
+    const vnode = createVNode(type, props, children, patchFlag)
+
+
+    return setupBlock(vnode)
+}
+
+export function toDisplayString(value) {
+    return isString(value)
+        ? value : value == null
+            ? '' : isObject(value)
+                ? JSON.stringify(value) : String(value)
+}
+
+export { createVNode as createElementVnode }

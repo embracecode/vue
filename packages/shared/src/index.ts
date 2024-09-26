@@ -28,4 +28,5 @@ export function hasOwn(obj, key) {
 
 
 export * from './shapeFlags'
+export * from './patchFlags'
 

@@ -5,6 +5,8 @@ import { Fragment, invokerLifeCycle, isKeepAlive } from "@vue/runtime-core"
 import { ReactiveEffect } from "@vue/reactivity"
 import { queueJob } from "./scheduler"
 import { createComponentInstance, setupComponent } from "./component"
+import { PatchFlags } from "@vue/shared"
+
 
 export function createRenderer(renderOptions) {
     // core中不关心如何渲染
@@ -22,18 +24,20 @@ export function createRenderer(renderOptions) {
     } = renderOptions
 
     const normalize = (children) => {
-        for (let i = 0; i < children.length; i++) { 
-            if (typeof children[i] === 'string' || typeof children[i] === 'number') {
-                children[i] = createVNode(Text, null, String(children[i]))
+        if (Array.isArray(children)) {
+            for (let i = 0; i < children.length; i++) { 
+                if (typeof children[i] === 'string' || typeof children[i] === 'number') {
+                    children[i] = createVNode(Text, null, String(children[i]))
+                }
             }
         }
         return children
     }
-    const mountChildren = (children, container, parentComponent) => {
+    const mountChildren = (children, container, anchor, parentComponent) => {
         children = normalize(children)
         for (let i = 0; i < children.length; i++) {
             let child = children[i]
-            patch(null, child, container, parentComponent)
+            patch(null, child, container, anchor, parentComponent)
         }
     }
 
@@ -58,7 +62,7 @@ export function createRenderer(renderOptions) {
         if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
             hostSetElementText(el, children)
         } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
-            mountChildren(children, el, parentComponent)
+            mountChildren(children, el, anchor, parentComponent)
         } 
         if (transition) {
             transition.beforeEnter(el)
@@ -219,7 +223,7 @@ export function createRenderer(renderOptions) {
             mountElement(newVnode, container, anchor, parentComponent)
         } else {
             // 是相同节点 比较两个元素的属性
-            patchElement(oldVnode, newVnode, container, parentComponent)
+            patchElement(oldVnode, newVnode, container, anchor, parentComponent)
             
         }
     }
@@ -239,11 +243,11 @@ export function createRenderer(renderOptions) {
     }
 
     // 处理Fragment
-    const processFragment = (oldVnode, newVnode, container, parentComponent) => { 
+    const processFragment = (oldVnode, newVnode, container, anchor, parentComponent) => { 
         if (oldVnode == null) {
-            mountChildren(newVnode.children, container, parentComponent)
+            mountChildren(newVnode.children, container, anchor, parentComponent)
         } else {
-            patchChildren(oldVnode, newVnode, container, parentComponent)
+            patchChildren(oldVnode, newVnode, container, anchor, parentComponent)
         }
     }
 
@@ -411,8 +415,8 @@ export function createRenderer(renderOptions) {
             }
         }
     }
-
-    const patchChildren = (oldVnode, newVnode, el, parentComponent) => { 
+    // 全量比对
+    const patchChildren = (oldVnode, newVnode, el, anchor, parentComponent) => { 
         // text children null  会有三种情况
         const oldChildren = oldVnode.children
         const newChildren = normalize(newVnode.children)
@@ -471,17 +475,23 @@ export function createRenderer(renderOptions) {
                 }
                 // 6.老的是文本，新的是数组，进行挂载
                 if (newShapeFlag & ShapeFlags.ARRAY_CHILDREN) {
-                    mountChildren(newChildren, el, parentComponent)
+                    mountChildren(newChildren, el, anchor, parentComponent)
                 }
 
             }
         }
 
     }
+    //线性比对 dynamicChildren
+    const patchBlockChildren = (oldVnode, newVnode, el, anchor, parentComponent) => { 
+        for (let i = 0; i < newVnode.dynamicChildren.length; i++) {
+            const oldChild = oldVnode.dynamicChildren[i]
+            const newChild = newVnode.dynamicChildren[i]
+            patch(oldChild, newChild, el, anchor, parentComponent)
+        }
+    }
 
-    
-
-    const patchElement = (oldVnode, newVnode, container, parentComponent) => { 
+    const patchElement = (oldVnode, newVnode, container, anchor, parentComponent) => { 
         // 1.比较元素的差异 需要服用原来的dom
         // 2.比较属性和元素的子节点
 
@@ -489,11 +499,40 @@ export function createRenderer(renderOptions) {
 
         let oldProps = oldVnode.props || {}
         let newProps = newVnode.props || {}
-        
-        // hostpatchProps 只针对某一个属性 class style event attr
-        patchProps(oldProps, newProps, el)
 
-        patchChildren(oldVnode, newVnode, el, parentComponent)
+        // 在比较元素的时候 针对某个属性去比较
+        const { patchFlag, dynamicChildren } = newVnode
+        if (patchFlag) {
+            if (patchFlag & PatchFlags.CLASS) {
+                // todo...
+            }
+            if (patchFlag & PatchFlags.STYLE) {
+                // todo...
+            }
+            if (patchFlag & PatchFlags.PROPS) { 
+                // todo...
+            }
+            
+        } else {
+            // hostpatchProps 只针对某一个属性 class style event attr
+            patchProps(oldProps, newProps, el)
+        }
+
+        if (patchFlag & PatchFlags.TEXT) {
+            // 只要文本是动态的只比较文本
+            if (oldVnode.children !== newVnode.children) { 
+                return hostSetElementText(el, newVnode.children)
+            }
+        }
+        
+        if (dynamicChildren) { 
+            // 线性比对
+            patchBlockChildren(oldVnode, newVnode, el, anchor, parentComponent)
+        } else {
+            // 全量比对
+            patchChildren(oldVnode, newVnode, el, anchor, parentComponent)
+        }
+        
     }
 
     // 渲染走这里 更新也走这里
@@ -512,7 +551,7 @@ export function createRenderer(renderOptions) {
                 processText(oldVnode, newVnode,container)
                 break
             case Fragment:
-                processFragment(oldVnode, newVnode, container, parentComponent) // 对fragment的处理
+                processFragment(oldVnode, newVnode, container, anchor, parentComponent) // 对fragment的处理
                 break
             default:
                 if (shapeFlag & ShapeFlags.ELEMENT) {

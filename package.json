@@ -6,13 +6,15 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev.js reactivity -f esm"
+    "dev": "node scripts/dev.js reactivity -f esm",
+    "dev:runtime-dom": "node scripts/dev.js runtime-dom -f esm"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@vue/reactivity": "^3.4.32",
+    "@vue/reactivity": "^3.5.26",
+    "@vue/runtime-dom": "^3.5.26",
     "@vue/shared": "^3.4.32",
     "vue": "^3.4.31"
   },

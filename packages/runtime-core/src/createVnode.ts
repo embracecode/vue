@@ -2,14 +2,19 @@ import { isString, ShapeFlags } from "@vue/shared"
 
 export function isVnode(vnode) {
     return vnode && vnode.__v_isVnode
-}export function createVnode(type, props, children?) {
+}
+export function isSameVnode(vnode1, vnode2) {
+    return vnode1.type === vnode2.type && vnode1.key === vnode2.key
+}
+
+export function createVnode(type, props, children?) {
     const shapeFlag = isString(type) ? ShapeFlags.ELEMENT : 0
     const vnode = {
         __v_isVnode: true,
         type,
         props,
         children,
-        key: props && props.key, // diff算法需要的key
+        key: props?.key, // diff算法需要的key
         el: null, // 虚拟节点对于的真是元素
         shapeFlag
     }

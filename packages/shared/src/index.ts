@@ -10,5 +10,6 @@ export function isRef(value) {
 export function isFunction(fn) {
   return typeof fn === 'function'
 }
+export * from './shapeFlags'
 
 

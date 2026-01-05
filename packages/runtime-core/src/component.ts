@@ -71,10 +71,14 @@ export function setupComponent (instance) { // 给组件实例赋值
     initProps(instance, vnode.props)
     // 赋值代理对象 使用户取值方便
     instance.proxy = new Proxy(instance, handlerProps)
-
-    const { data, render } = vnode.type
-    if (!isFunction(data)) return console.warn('data must be a function')
-    // data 中拿到组件的状态
-    instance.data = reactive(data.call(instance.proxy))
+    //  这一块不太严谨 data 肯能为空 然后就会弹出警告 先给个默认值判断
+    const { data= () => {}, render } = vnode.type 
+    if (!isFunction(data)) {
+        console.warn('data must be a function')
+    } else {
+        // data 中拿到组件的状态
+        instance.data = reactive(data.call(instance.proxy))
+    }
+    
     instance.render = render
 }

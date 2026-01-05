@@ -270,6 +270,11 @@ export function createRenderer(renderOptions) {
             patchChildren(oldVnode, newVnode, container)
         }
     }
+    const updateComponentPreRender = (instance, next) => {
+        instance.next = {}
+        instance.vnode = next
+        updateProps(instance, instance.props, next.props)
+    }
     const setupRenderEffect = (instance, container, anchor) => {
         const { render } = instance
         const componentUpdateFn = () => { // 组件的更新函数
@@ -282,6 +287,12 @@ export function createRenderer(renderOptions) {
                 instance.subTree = subTree
             } else {
                 // 基于状态的组件更新
+                console.log('组件更新', instance.next)
+                const { next } = instance
+                if (next) { // 属性或者插槽有更新 
+                    // 更新组件在渲染之前
+                    updateComponentPreRender(instance, next)
+                }
                 const subTree = render.call(instance.proxy, instance.proxy)
                 patch(instance.subTree, subTree, container, anchor)
                 instance.subTree = subTree
@@ -384,6 +395,59 @@ export function createRenderer(renderOptions) {
         // const update = (instance.update = () => effect.run()) // 更新函数
         // update()
     }
+
+    const hasPropsChange = (preProps, nextProps) => {
+        const oldKey = Object.keys(preProps)
+        if (oldKey.length !== Object.keys(nextProps).length) {
+            return true
+        }
+        for (let i = 0; i < oldKey.length; i++) {
+            const key = oldKey[i]
+            if (preProps[key] !== nextProps[key]) {
+                return true
+            }
+        }
+        return false
+    }
+    // 组件属性更新 重新渲染逻辑
+    const updateProps = (instance, preProps, nextProps) => {
+        if (hasPropsChange(preProps, nextProps)) { // 看属性是否存在变化
+            for (const key in nextProps) {
+                // 用新的覆盖所有老的
+                instance.props[key] = nextProps[key]
+            }
+            for (const key in instance.props) {
+                // 删除老的多余的
+                if (!(key in nextProps)) {
+                    delete instance.props[key]
+                }
+            }
+        }
+    }
+    const shouldComponentUpdate = (oldVnode, newVnode) => {
+        const { props: preProps, children: preChildren} = oldVnode
+        const { props: nextProps, children: nextChildren} = newVnode
+        if (preChildren || nextChildren) { // 如果有插槽直接渲染
+            return true
+        }
+        if (preProps === nextProps) {
+            return false
+        }
+        // 如果属性不一致则更新组件
+        return hasPropsChange(preProps, nextProps)
+        // updateProps(instance,preProps, nextProps)
+    }
+    const upDateComponent = (oldVnode, newVnode) => {
+        const instance = (newVnode.component = oldVnode.component) // 复用组件的实例
+        // const { props: preProps} = oldVnode
+        // const { props: nextProps} = newVnode
+        // updateProps(instance,preProps, nextProps )
+        // 属性更新和状态更新放在一块 更容易管理 而不是像上述内容内容更新属性写一个更新组件写一个
+        if(shouldComponentUpdate(oldVnode, newVnode)){
+            instance.next = newVnode // 如果调用update方法的时候有next 属性 说明是属性更新 或者插槽更新
+            instance.update() // 让更新逻辑统一
+        }
+    }
     // 处理组件
     const processComponent = (oldVnode, newVnode, container, anchor) => {
         if (oldVnode == null) {
@@ -391,7 +455,7 @@ export function createRenderer(renderOptions) {
             mountComponent(newVnode, container, anchor)
         } else {
             // 更新
-            // patchComponent(oldVnode, newVnode)
+            upDateComponent(oldVnode, newVnode)
         }
     }
     // 渲染走这里 更新也走这里

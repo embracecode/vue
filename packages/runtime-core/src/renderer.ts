@@ -1,4 +1,4 @@
-import { ShapeFlags } from "@vue/shared"
+import { ShapeFlags, hasOwn } from "@vue/shared"
 import { isSameVnode, Text, Fragment } from "./createVnode"
 import { getSequence } from "./seq"
 import { reactive, ReactiveEffect } from "@vue/reactivity"
@@ -302,23 +302,56 @@ export function createRenderer(renderOptions) {
             props: {},
             attrs: {},
             propsOptinos,
-            component: null
+            component: null,
+            proxy: null, // 用来代理组件的state props attrs 方便使用者的访问
         }
         // 更具propsOptions 来区分处props 和 attrs
         vnode.component = instance
         // 元素的更新  newVnode.el = oldVnode.el
         // 组件的更新  newVnode.component.subTree.el = oldVnode.component.subTree.el
         initProps(instance, vnode.props)
+        const publicPropertys = {
+            $attrs: (instance) => instance.attrs,
+            $slots: (instance) => instance.slots,
+            // ...
+        }
+        instance.proxy = new Proxy(instance, {
+            get(target, key) {
+                const { state, props, attrs } = target
+                if (state && hasOwn(state, key)) {
+                    return state[key]
+                } else if (props && hasOwn(props, key)) {
+                    return props[key]
+                }
+                // 对于一些无法修改的属性 只能去读取 $attrs  $solts
+                const getter = publicPropertys[key]
+                if (getter) {
+                    return getter(target)
+                }
+                
+            },
+            set(target, key, value) {
+                const { state, props, attrs } = target
+                if (state && hasOwn(state, key)) {
+                    state[key] = value
+                } else if (props && hasOwn(props, key)) {
+                    console.warn('props not support set')
+                    return false
+                }
+                return true
+            }
+        })
         const componentUpdateFn = () => { // 组件的更新函数
             if (!instance.isMounted) {
                 // 要在这里作区分 是第一次初渲染还是第二次更新渲染 如果是更新 需要比对新老节点变化
-                const subTree = render.call(state, state)
+                // 这里render不仅仅是组件的data 也要包含组件的props attrs
+                const subTree = render.call(instance.proxy, instance.proxy)
                 patch(null, subTree, container, anchor)
                 instance.isMounted = true
                 instance.subTree = subTree
             } else {
                 // 基于状态的组件更新
-                const subTree = render.call(state, state)
+                const subTree = render.call(instance.proxy, instance.proxy)
                 patch(instance.subTree, subTree, container, anchor)
                 instance.subTree = subTree
             }

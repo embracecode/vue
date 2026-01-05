@@ -106,7 +106,6 @@ export function trackEffect(effect, dep) {
     // dep.set(effect, effect._tracdId); // 收集依赖
     // effect.dep[effect._depsLength++] = dep; // 记录依赖的effect
 
-    console.log(dep.get(effect), effect._tracdId);
     // 这两个值不一样 需要做依赖收集 过滤了重复收集的问题（处理分支切换不必要的更新以及重复）
     if (dep.get(effect) !== effect._tracdId) { 
         dep.set(effect, effect._tracdId); // 优化了多余的收集

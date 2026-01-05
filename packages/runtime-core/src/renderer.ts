@@ -1,6 +1,7 @@
 import { ShapeFlags } from "@vue/shared"
 import { isSameVnode, Text, Fragment } from "./createVnode"
 import { getSequence } from "./seq"
+import { reactive, ReactiveEffect } from "@vue/reactivity"
 
 
 export function createRenderer(renderOptions) {
@@ -267,6 +268,49 @@ export function createRenderer(renderOptions) {
             patchChildren(oldVnode, newVnode, container)
         }
     }
+    // 挂载组件
+    const mountComponent = (vnode, container, anchor) => {
+        // 组件可以基于自己的状态重新渲染  effect
+        const { data = () => {}, render } = vnode.type
+        const state = reactive(data()) // 组件的状态
+        const instance = {
+            state, // 状态
+            vnode, // 组件的虚拟节点
+            subTree: null, // 组件的子树（组件的渲染内容）
+            isMounted: false, // 是否挂载
+            update: null // 组件的更新函数
+        }
+        const componentUpdateFn = () => { // 组件的更新函数
+            if (!instance.isMounted) {
+                // 要在这里作区分 是第一次初渲染还是第二次更新渲染 如果是更新 需要比对新老节点变化
+                const subTree = render.call(state, state)
+                patch(null, subTree, container, anchor)
+                instance.isMounted = true
+                instance.subTree = subTree
+            } else {
+                // 基于状态的组件更新
+                const subTree = render.call(state, state)
+                patch(instance.subTree, subTree, container, anchor)
+                instance.subTree = subTree
+            }
+            
+        }
+        
+        const effect = new ReactiveEffect(componentUpdateFn, () => update())
+
+        const update = (instance.update = () => effect.run()) // 更新函数
+        update()
+    }
+    // 处理组件
+    const processComponent = (oldVnode, newVnode, container, anchor) => {
+        if (oldVnode == null) {
+            // 初始化逻辑
+            mountComponent(newVnode, container, anchor)
+        } else {
+            // 更新
+            // patchComponent(oldVnode, newVnode)
+        }
+    }
     // 渲染走这里 更新也走这里
     const patch = (oldVnode, newVnode, container, anchor = null) => {
         if (oldVnode == newVnode) {
@@ -288,7 +332,7 @@ export function createRenderer(renderOptions) {
         //     patchElement(oldVnode, newVnode, container)
         // }
 
-        const { type } =  newVnode
+        const { type, shapeFlag } =  newVnode
         switch (type) {
             case Text:
                 processText(oldVnode, newVnode, container)
@@ -297,8 +341,13 @@ export function createRenderer(renderOptions) {
                 processFragment(oldVnode, newVnode, container)
                 break
             default:
-                // 对元素处理
-                processElement(oldVnode, newVnode, container, anchor)
+                if (shapeFlag & ShapeFlags.ELEMENT) {
+                    // 对元素处理
+                    processElement(oldVnode, newVnode, container, anchor)
+                } else if(shapeFlag & ShapeFlags.COMPONENT) {
+                    // 对组件的处理 vue3的函数组件（没有性能优势了） 与 状态组件
+                    processComponent(oldVnode, newVnode, container, anchor)
+                }
         }
         
     }

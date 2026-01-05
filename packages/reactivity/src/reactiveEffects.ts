@@ -32,7 +32,6 @@ export function track(target, key) {
             depsMap.set(key, (dep = createDeps(() => { depsMap.delete(key) }, key)));
         }
         trackEffect(activeEffect, dep); // 将当前的effect 放入到对应的映射（dep）中 后续可以根据值的改变触发effect的重新执行
-         console.log(targetMap);
     }
 }
 

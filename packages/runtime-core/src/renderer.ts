@@ -2,6 +2,7 @@ import { ShapeFlags } from "@vue/shared"
 import { isSameVnode, Text, Fragment } from "./createVnode"
 import { getSequence } from "./seq"
 import { reactive, ReactiveEffect } from "@vue/reactivity"
+import { queueJob } from "./scheduler"
 
 
 export function createRenderer(renderOptions) {
@@ -268,18 +269,46 @@ export function createRenderer(renderOptions) {
             patchChildren(oldVnode, newVnode, container)
         }
     }
+    // 初始化属性
+    const initProps = (instance, rowProps) => {
+        console.log('initProps', rowProps)
+        const props = {}
+        const attrs = {}
+        const propsOptions = instance.propsOptinos || {} // 用户在组件中定义的
+        if (rowProps) { // rowProps 用户传入的属性但是有可能在组件中未定义
+            for (const key in rowProps) {
+                if (propsOptions[key]) {
+                    props[key] = rowProps[key]
+                } else {
+                    attrs[key] = rowProps[key]
+                }
+            }
+        }
+        // 源码中用的shallowReactive
+        instance.props = reactive(props) // props 不需要深度响应式 组件不允许更改传递过来的属性
+        instance.attrs = attrs
+    }
     // 挂载组件
     const mountComponent = (vnode, container, anchor) => {
         // 组件可以基于自己的状态重新渲染  effect
-        const { data = () => {}, render } = vnode.type
+        const { data = () => {}, render, props: propsOptinos = {} } = vnode.type
         const state = reactive(data()) // 组件的状态
         const instance = {
             state, // 状态
             vnode, // 组件的虚拟节点
             subTree: null, // 组件的子树（组件的渲染内容）
             isMounted: false, // 是否挂载
-            update: null // 组件的更新函数
+            update: null, // 组件的更新函数
+            props: {},
+            attrs: {},
+            propsOptinos,
+            component: null
         }
+        // 更具propsOptions 来区分处props 和 attrs
+        vnode.component = instance
+        // 元素的更新  newVnode.el = oldVnode.el
+        // 组件的更新  newVnode.component.subTree.el = oldVnode.component.subTree.el
+        initProps(instance, vnode.props)
         const componentUpdateFn = () => { // 组件的更新函数
             if (!instance.isMounted) {
                 // 要在这里作区分 是第一次初渲染还是第二次更新渲染 如果是更新 需要比对新老节点变化
@@ -296,7 +325,7 @@ export function createRenderer(renderOptions) {
             
         }
         
-        const effect = new ReactiveEffect(componentUpdateFn, () => update())
+        const effect = new ReactiveEffect(componentUpdateFn, () => queueJob(update))
 
         const update = (instance.update = () => effect.run()) // 更新函数
         update()

@@ -1,4 +1,4 @@
-import { reactive } from "@vue/reactivity"
+import { proxyRefs, reactive } from "@vue/reactivity"
 import { hasOwn, isFunction } from "@vue/shared"
 
 export function createComponentInstance (vnode) {
@@ -13,6 +13,7 @@ export function createComponentInstance (vnode) {
         propsOptinos: vnode.type.props, // 用户声明的属性
         component: null,
         proxy: null, // 用来代理组件的state props attrs 方便使用者的访问
+        setupState: {}
     }
     return instance
 }
@@ -41,11 +42,13 @@ const publicPropertys = {
 }
 const handlerProps = {
     get(target, key) {
-        const { data, props, attrs } = target
+        const { data, props, attrs, setupState } = target
         if (data && hasOwn(data, key)) {
             return data[key]
         } else if (props && hasOwn(props, key)) {
             return props[key]
+        } else if (setupState && hasOwn(setupState, key)) {
+            return setupState[key]
         }
         // 对于一些无法修改的属性 只能去读取 $attrs  $solts
         const getter = publicPropertys[key]
@@ -55,12 +58,14 @@ const handlerProps = {
         
     },
     set(target, key, value) {
-        const { data, props, attrs } = target
+        const { data, props, attrs, setupState } = target
         if (data && hasOwn(data, key)) {
             data[key] = value
         } else if (props && hasOwn(props, key)) {
             console.warn('props not support set')
             return false
+        } else if (setupState && hasOwn(setupState, key)) {
+            setupState[key] = value
         }
         return true
     }
@@ -72,7 +77,24 @@ export function setupComponent (instance) { // 给组件实例赋值
     // 赋值代理对象 使用户取值方便
     instance.proxy = new Proxy(instance, handlerProps)
     //  这一块不太严谨 data 肯能为空 然后就会弹出警告 先给个默认值判断
-    const { data= () => {}, render } = vnode.type 
+    const { data= () => {}, render, setup } = vnode.type 
+
+    if (setup) {
+        const setupContext = {
+            attrs: null,
+            slots: null,
+            emit: null,
+            expose: null
+            // ...
+        }
+        const setupResult = setup(instance.props, setupContext)
+        if (isFunction(setupResult)) {
+            instance.render = setupResult
+        } else {
+            instance.setupState = proxyRefs(setupResult) // 将返回的值做torefs 保持响应式
+        }
+    }
+
     if (!isFunction(data)) {
         console.warn('data must be a function')
     } else {
@@ -80,5 +102,7 @@ export function setupComponent (instance) { // 给组件实例赋值
         instance.data = reactive(data.call(instance.proxy))
     }
     
-    instance.render = render
+    if (!instance.render) { // 没有render时用自己的
+        instance.render = render
+    }
 }

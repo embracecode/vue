@@ -14,7 +14,8 @@ export function createComponentInstance (vnode) {
         propsOptinos: vnode.type.props, // 用户声明的属性
         component: null,
         proxy: null, // 用来代理组件的state props attrs 方便使用者的访问
-        setupState: {}
+        setupState: {},
+        exposed: null
     }
     return instance
 }
@@ -91,10 +92,17 @@ export function setupComponent (instance) { // 给组件实例赋值
 
     if (setup) {
         const setupContext = {
-            attrs: null,
-            slots: null,
-            emit: null,
-            expose: null
+            attrs: instance.attrs,
+            slots: instance.slots,
+            emit(event, ...args) {
+                // onMyEvent
+                const eventName = `on${event[0].toUpperCase() + event.slice(1)}`
+                const handler = instance.vnode.props[eventName]
+                handler && handler(...args)
+            },
+            expose (value) {
+                instance.exposed = value
+            }
             // ...
         }
         const setupResult = setup(instance.props, setupContext)

@@ -1,5 +1,5 @@
 import { proxyRefs, reactive } from "@vue/reactivity"
-import { hasOwn, isFunction } from "@vue/shared"
+import { hasOwn, isFunction, ShapeFlags } from "@vue/shared"
 
 export function createComponentInstance (vnode) {
     const instance = {
@@ -10,6 +10,7 @@ export function createComponentInstance (vnode) {
         update: null, // 组件的更新函数
         props: {},
         attrs: {},
+        slots: {},
         propsOptinos: vnode.type.props, // 用户声明的属性
         component: null,
         proxy: null, // 用来代理组件的state props attrs 方便使用者的访问
@@ -34,6 +35,14 @@ const initProps = (instance, rowProps) => {
     // 源码中用的shallowReactive
     instance.props = reactive(props) // props 不需要深度响应式 组件不允许更改传递过来的属性
     instance.attrs = attrs
+}
+// 初始化插槽
+const initPropslots = (instance, children) => { // 初始化插槽
+    if (instance.vnode.shapeFlag & ShapeFlags.SLOTS_CHILDREN) {
+        instance.slots = children
+    } else {
+        instance.slots = {}
+    }
 }
 const publicPropertys = {
     $attrs: (instance) => instance.attrs,
@@ -74,6 +83,7 @@ export function setupComponent (instance) { // 给组件实例赋值
     const { vnode } = instance
     // 赋值属性
     initProps(instance, vnode.props)
+    initPropslots(instance, vnode.children)
     // 赋值代理对象 使用户取值方便
     instance.proxy = new Proxy(instance, handlerProps)
     //  这一块不太严谨 data 肯能为空 然后就会弹出警告 先给个默认值判断

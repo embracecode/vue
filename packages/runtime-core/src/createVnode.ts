@@ -22,7 +22,8 @@ export function createVnode(type, props, children?) {
         children,
         key: props?.key, // diff算法需要的key
         el: null, // 虚拟节点对于的真是元素
-        shapeFlag
+        shapeFlag,
+        ref: props?.ref
     }
     if (children) {
         if(Array.isArray(children)) {

@@ -1,4 +1,4 @@
-import { ShapeFlags, hasOwn } from "@vue/shared"
+import { ShapeFlags, hasOwn, isRef } from "@vue/shared"
 import { isSameVnode, Text, Fragment } from "./createVnode"
 import { getSequence } from "./seq"
 import { reactive, ReactiveEffect } from "@vue/reactivity"
@@ -495,7 +495,7 @@ export function createRenderer(renderOptions) {
         //     patchElement(oldVnode, newVnode, container)
         // }
 
-        const { type, shapeFlag } =  newVnode
+        const { type, shapeFlag, ref } =  newVnode
         switch (type) {
             case Text:
                 processText(oldVnode, newVnode, container)
@@ -512,7 +512,16 @@ export function createRenderer(renderOptions) {
                     processComponent(oldVnode, newVnode, container, anchor)
                 }
         }
+        if (ref !== null) {
+            setRef(ref, newVnode)
+        }
         
+    }
+    function setRef(rawRef, vnode) {
+        let refValue = vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT ? vnode.component.exposed || vnode.component.proxy : vnode.el
+        if (isRef(rawRef)) {
+            rawRef.value = refValue
+        }
     }
     const unmount = (vnode) => {
         const { shapeFlag } = vnode

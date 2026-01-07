@@ -8,7 +8,9 @@ export const nodeOps = {
             parent.removeChild(el)
         }
     },
-    setElementText: (el, text) => el.textContent = text, // 元素设置文本内容
+    setElementText: (el, text) => {
+        el.textContent = text
+    }, // 元素设置文本内容
     createText: (text) => document.createTextNode(text),
     setText: (el, text) => el.nodeValue = text, // 设置文本
     parentNode: (node) => node.parentNode,

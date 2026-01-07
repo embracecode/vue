@@ -12,6 +12,7 @@ const renderOptions = Object.assign({patchProp}, nodeOps)
 export const render = (vnode, container) => createRenderer(renderOptions).render(vnode, container)
 
 export * from '@vue/runtime-core'
+export * from './nodeOps'
 // runtime-dom --> runtime-core ---> reactivity
 
 // createRenderer(renderer).render()

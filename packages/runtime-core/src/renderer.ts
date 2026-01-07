@@ -4,6 +4,7 @@ import { getSequence } from "./seq"
 import { reactive, ReactiveEffect } from "@vue/reactivity"
 import { queueJob } from "./scheduler"
 import { createComponentInstance, setupComponent } from "./component"
+import { invokeLifeCycleHook } from "./apiLifecycle"
 
 
 export function createRenderer(renderOptions) {
@@ -278,24 +279,39 @@ export function createRenderer(renderOptions) {
     const setupRenderEffect = (instance, container, anchor) => {
         const { render } = instance
         const componentUpdateFn = () => { // 组件的更新函数
+            const { bm, m } = instance
             if (!instance.isMounted) {
+                if (bm) {
+                    invokeLifeCycleHook(bm)
+                }
                 // 要在这里作区分 是第一次初渲染还是第二次更新渲染 如果是更新 需要比对新老节点变化
                 // 这里render不仅仅是组件的data 也要包含组件的props attrs
                 const subTree = render.call(instance.proxy, instance.proxy)
                 patch(null, subTree, container, anchor)
                 instance.isMounted = true
                 instance.subTree = subTree
+
+                if (m) {
+                    invokeLifeCycleHook(m)
+                }
             } else {
                 // 基于状态的组件更新
-                console.log('组件更新', instance.next)
-                const { next } = instance
+                const { next, bu, u } = instance
                 if (next) { // 属性或者插槽有更新 
                     // 更新组件在渲染之前
                     updateComponentPreRender(instance, next)
                 }
+                if (bu) {
+                    invokeLifeCycleHook(bu)
+                }
+                // 要在这里作区分 是第一次初渲染还是第二次更新渲染 如果是更新 需要比对新老节点变化
                 const subTree = render.call(instance.proxy, instance.proxy)
                 patch(instance.subTree, subTree, container, anchor)
                 instance.subTree = subTree
+
+                if (u) {
+                    invokeLifeCycleHook(u)
+                }
             }
             
         }

@@ -105,7 +105,11 @@ export function setupComponent (instance) { // 给组件实例赋值
             }
             // ...
         }
+        // 在setup 执行之前设置组件实例
+        setCurrentInstance(instance)
         const setupResult = setup(instance.props, setupContext)
+        // 执行完之后还原
+        unSetCurrentInstance()
         if (isFunction(setupResult)) {
             instance.render = setupResult
         } else {
@@ -123,4 +127,15 @@ export function setupComponent (instance) { // 给组件实例赋值
     if (!instance.render) { // 没有render时用自己的
         instance.render = render
     }
+}
+export let currentInstance = null
+export function getCurrentInstance () {
+    return currentInstance
+}
+
+export function setCurrentInstance (instance) {
+    currentInstance = instance
+}
+export function unSetCurrentInstance () {
+    currentInstance = null
 }

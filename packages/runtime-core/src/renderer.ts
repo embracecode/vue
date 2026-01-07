@@ -1,5 +1,5 @@
 import { ShapeFlags, hasOwn, isRef } from "@vue/shared"
-import { isSameVnode, Text, Fragment } from "./createVnode"
+import { isSameVnode, Text, Fragment, createVnode } from "./createVnode"
 import { getSequence } from "./seq"
 import { reactive, ReactiveEffect } from "@vue/reactivity"
 import { queueJob } from "./scheduler"
@@ -21,13 +21,13 @@ export function createRenderer(renderOptions) {
         parentNode: hostParentNode,
         nextSibling: hostNextSibling
     } = renderOptions
-
-    const mountChildren = (children, container) => {
-        children.forEach(child => {
-            patch(null, child, container)
-        })
+    
+    const mountChildren = (children, container, parentComponent) => {
+        for (let i = 0; i < children.length; i++) {
+            patch(null, children[i], container, null, parentComponent)
+        }
     }
-    const mountElement = (vnode, container, anchor) => {
+    const mountElement = (vnode, container, anchor, parentComponent) => {
         const { type, props, children, shapeFlag } = vnode
         // 第一次渲染的时候 让虚拟节点对应的真实节点 创建关联 vnode.el = 真是dom
         // 第二次渲染新的vnode 可以和上一次的vnode进行对比 之后进行对应的el元素 可以后续复用这个元素
@@ -41,17 +41,17 @@ export function createRenderer(renderOptions) {
         if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
             hostSetElementText(el, children)
         } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) { // 儿子是个数组
-            mountChildren(children, el)
+            mountChildren(children, el, parentComponent)
         }
         hostInsert(el, container, anchor)
     }
-    const processElement = (oldVnode, newVnode, container, anchor) => {
+    const processElement = (oldVnode, newVnode, container, anchor, parentComponent) => {
         if (oldVnode === null) {
             // 初始化操作
-            mountElement(newVnode, container, anchor)
+            mountElement(newVnode, container, anchor, parentComponent)
         } else {
             // 两个元素一样
-            patchElement(oldVnode, newVnode, container,)
+            patchElement(oldVnode, newVnode, container, parentComponent)
         }
     }
     const patchProps = (oldProps, newProps, el) => {
@@ -135,7 +135,7 @@ export function createRenderer(renderOptions) {
                 const vnode = newChildVnode[i]
                 keyToNewIndexMap.set(vnode.key, i)
             }
-            console.log(keyToNewIndexMap);
+            console.log(keyToNewIndexMap, toBePatched, '------', e2, s2, newChildVnode);
             for (let i = s1; i <= e1; i++) {
                 const oldVnode = oldChildVnode[i]
                 const newIndex = keyToNewIndexMap.get(oldVnode.key) // 通过key找到对应的索引
@@ -145,6 +145,7 @@ export function createRenderer(renderOptions) {
                     // 有可能 i 等于0 的情况与 newIndexToOldMapIndex为零的情况重复 为了保证0 是没有比对过的元素 直接 i+ 1
                     newIndexToOldMapIndex[newIndex - s2] = i + 1
                     // 比较新老节点的差异 更新属性和儿子
+                    console.log(oldVnode, newChildVnode[newIndex], '-----');
                     patch(oldVnode, newChildVnode[newIndex], container)// 可以复用了 但是位置不对需要调整位置
                 }
             }
@@ -173,7 +174,7 @@ export function createRenderer(renderOptions) {
 
         }
     }
-    const patchChildren = (oldVnode, newVnode, el) => {
+    const patchChildren = (oldVnode, newVnode, el, parentComponent) => {
         // text array null
         const c1 = oldVnode.children
         const c2 = newVnode.children
@@ -228,13 +229,13 @@ export function createRenderer(renderOptions) {
                 }
                 if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
                     // 6.老的是文本，新的是数组
-                    mountChildren(c2, el)
+                    mountChildren(c2, el, parentComponent)
                 }
             }
             
         }
     }
-    const patchElement = (oldVnode, newVnode, container) => {
+    const patchElement = (oldVnode, newVnode, container, parentComponent) => {
         // 1. 比较元素的差异  肯定需要复用dom
         // 2. 比较属性和元素的子节点
         let el = (newVnode.el = oldVnode.el) // 对dom的复用
@@ -243,7 +244,7 @@ export function createRenderer(renderOptions) {
         // hostPatchProp 只针对某一个属性处理 class style on attr
         patchProps(oldProps, newProps, el)
         // 比较儿子节点
-        patchChildren(oldVnode, newVnode, el)
+        patchChildren(oldVnode, newVnode, el, parentComponent)
         // 3. 比较文本
     }
     // 处理文本类型
@@ -262,13 +263,13 @@ export function createRenderer(renderOptions) {
         }
     }
     // 处理文档碎片
-    const processFragment = (oldVnode, newVnode, container) => {
+    const processFragment = (oldVnode, newVnode, container, parentComponent) => {
         if (oldVnode == null) {
             // 初始化操作
-            mountChildren(newVnode.children, container)
+            mountChildren(newVnode.children, container, parentComponent)
         } else {
             // 更新操作
-            patchChildren(oldVnode, newVnode, container)
+            patchChildren(oldVnode, newVnode, container, parentComponent)
         }
     }
     const updateComponentPreRender = (instance, next) => {
@@ -287,7 +288,7 @@ export function createRenderer(renderOptions) {
         }
 
     }
-    const setupRenderEffect = (instance, container, anchor) => {
+    const setupRenderEffect = (instance, container, anchor, parentComponent) => {
         const { render } = instance
         const componentUpdateFn = () => { // 组件的更新函数
             const { bm, m } = instance
@@ -300,7 +301,7 @@ export function createRenderer(renderOptions) {
                 // const subTree = render.call(instance.proxy, instance.proxy)
                 const subTree = renderComponent(instance)
 
-                patch(null, subTree, container, anchor)
+                patch(null, subTree, container, anchor, instance)
                 instance.isMounted = true
                 instance.subTree = subTree
 
@@ -320,7 +321,7 @@ export function createRenderer(renderOptions) {
                 // 要在这里作区分 是第一次初渲染还是第二次更新渲染 如果是更新 需要比对新老节点变化
                 // const subTree = render.call(instance.proxy, instance.proxy)
                 const subTree = renderComponent(instance)
-                patch(instance.subTree, subTree, container, anchor)
+                patch(instance.subTree, subTree, container, anchor, instance)
                 instance.subTree = subTree
 
                 if (u) {
@@ -336,14 +337,14 @@ export function createRenderer(renderOptions) {
         update()
     }
     // 挂载组件
-    const mountComponent = (vnode, container, anchor) => {
+    const mountComponent = (vnode, container, anchor, parentComponent) => {
 
         // 1.先创建组件实例
-        const instance = (vnode.component = createComponentInstance(vnode))
+        const instance = (vnode.component = createComponentInstance(vnode, parentComponent))
         // 2.给实例属性赋值
         setupComponent(instance)
         // 3.创建effect函数
-        setupRenderEffect(instance, container, anchor)
+        setupRenderEffect(instance, container, anchor, parentComponent)
 
 
         // 把下面的步骤抽离为上述内容
@@ -479,17 +480,17 @@ export function createRenderer(renderOptions) {
         }
     }
     // 处理组件
-    const processComponent = (oldVnode, newVnode, container, anchor) => {
+    const processComponent = (oldVnode, newVnode, container, anchor, parentComponent) => {
         if (oldVnode == null) {
             // 初始化逻辑
-            mountComponent(newVnode, container, anchor)
+            mountComponent(newVnode, container, anchor, parentComponent)
         } else {
             // 更新
             upDateComponent(oldVnode, newVnode)
         }
     }
     // 渲染走这里 更新也走这里
-    const patch = (oldVnode, newVnode, container, anchor = null) => {
+    const patch = (oldVnode, newVnode, container, anchor = null, parentComponent = null) => {
         if (oldVnode == newVnode) {
             // 两个节点渲染同一个元素直接跳过
             return
@@ -508,22 +509,21 @@ export function createRenderer(renderOptions) {
         //     // 两个元素一样
         //     patchElement(oldVnode, newVnode, container)
         // }
-
         const { type, shapeFlag, ref } =  newVnode
         switch (type) {
             case Text:
                 processText(oldVnode, newVnode, container)
                 break
             case Fragment:
-                processFragment(oldVnode, newVnode, container)
+                processFragment(oldVnode, newVnode, container, parentComponent)
                 break
             default:
                 if (shapeFlag & ShapeFlags.ELEMENT) {
                     // 对元素处理
-                    processElement(oldVnode, newVnode, container, anchor)
+                    processElement(oldVnode, newVnode, container, anchor, parentComponent)
                 } else if(shapeFlag & ShapeFlags.COMPONENT) {
                     // 对组件的处理 vue3的函数组件（没有性能优势了） 与 状态组件
-                    processComponent(oldVnode, newVnode, container, anchor)
+                    processComponent(oldVnode, newVnode, container, anchor, parentComponent)
                 }
         }
         if (ref !== null) {

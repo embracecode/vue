@@ -30,6 +30,11 @@ export function createVnode(type, props, children?) {
     if (children) {
         if(Array.isArray(children)) {
             vnode.shapeFlag |= ShapeFlags.ARRAY_CHILDREN
+            for(let i = 0; i < children.length; i++){
+                if(typeof children[i] === 'string' || typeof children[i] === 'number'){
+                    children[i] = createVnode(Text, null, String(children[i]))
+                }
+            }
         } else if(isObject(children)){
             vnode.shapeFlag |= ShapeFlags.SLOTS_CHILDREN // 组件的孩子
         } else {

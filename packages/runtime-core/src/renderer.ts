@@ -276,6 +276,17 @@ export function createRenderer(renderOptions) {
         instance.vnode = next
         updateProps(instance, instance.props, next.props)
     }
+
+    function renderComponent(instance) {
+        const { render, vnode, proxy, attrs } = instance
+        if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
+            return render.call(proxy, proxy)
+        } else {
+            // 函数组件  在vue3 中没有性能优化 也不推荐使用函数式组件
+            return vnode.type(attrs)
+        }
+
+    }
     const setupRenderEffect = (instance, container, anchor) => {
         const { render } = instance
         const componentUpdateFn = () => { // 组件的更新函数
@@ -286,7 +297,9 @@ export function createRenderer(renderOptions) {
                 }
                 // 要在这里作区分 是第一次初渲染还是第二次更新渲染 如果是更新 需要比对新老节点变化
                 // 这里render不仅仅是组件的data 也要包含组件的props attrs
-                const subTree = render.call(instance.proxy, instance.proxy)
+                // const subTree = render.call(instance.proxy, instance.proxy)
+                const subTree = renderComponent(instance)
+
                 patch(null, subTree, container, anchor)
                 instance.isMounted = true
                 instance.subTree = subTree
@@ -305,7 +318,8 @@ export function createRenderer(renderOptions) {
                     invokeLifeCycleHook(bu)
                 }
                 // 要在这里作区分 是第一次初渲染还是第二次更新渲染 如果是更新 需要比对新老节点变化
-                const subTree = render.call(instance.proxy, instance.proxy)
+                // const subTree = render.call(instance.proxy, instance.proxy)
+                const subTree = renderComponent(instance)
                 patch(instance.subTree, subTree, container, anchor)
                 instance.subTree = subTree
 

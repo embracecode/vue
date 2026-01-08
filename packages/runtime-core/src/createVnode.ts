@@ -1,5 +1,5 @@
 import { isFunction, isObject, isString, ShapeFlags } from "@vue/shared"
-import { isTeleport } from "./teleport"
+import { isTeleport } from "./compoments/teleport"
 
 export const Text = Symbol('Text')
 export const Fragment = Symbol('Fragment')

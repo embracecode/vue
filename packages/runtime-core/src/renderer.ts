@@ -28,7 +28,7 @@ export function createRenderer(renderOptions) {
         }
     }
     const mountElement = (vnode, container, anchor, parentComponent) => {
-        const { type, props, children, shapeFlag } = vnode
+        const { type, props, children, shapeFlag, transition } = vnode
         // 第一次渲染的时候 让虚拟节点对应的真实节点 创建关联 vnode.el = 真是dom
         // 第二次渲染新的vnode 可以和上一次的vnode进行对比 之后进行对应的el元素 可以后续复用这个元素
         const el = (vnode.el = hostCreateElement(type))
@@ -43,7 +43,16 @@ export function createRenderer(renderOptions) {
         } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) { // 儿子是个数组
             mountChildren(children, el, parentComponent)
         }
+
+        if (transition) {
+            transition.beforeEnter(el)
+        }
+
         hostInsert(el, container, anchor)
+
+        if (transition) {
+            transition.enter(el)
+        }
     }
     const processElement = (oldVnode, newVnode, container, anchor, parentComponent) => {
         if (oldVnode === null) {
@@ -276,15 +285,17 @@ export function createRenderer(renderOptions) {
         instance.next = {}
         instance.vnode = next
         updateProps(instance, instance.props, next.props)
+        // 组件更新的时候需要更新插槽
+        Object.assign(instance.slots, next.children)
     }
 
     function renderComponent(instance) {
-        const { render, vnode, proxy, attrs } = instance
+        const { render, vnode, proxy, attrs, slots } = instance
         if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
             return render.call(proxy, proxy)
         } else {
             // 函数组件  在vue3 中没有性能优化 也不推荐使用函数式组件
-            return vnode.type(attrs)
+            return vnode.type(attrs, { slots })
         }
 
     }
@@ -548,7 +559,10 @@ export function createRenderer(renderOptions) {
         }
     }
     const unmount = (vnode) => {
-        const { shapeFlag } = vnode
+        const { shapeFlag, transition, el } = vnode
+        const performRemove = () => {
+            hostRemove(el)
+        }
         if (vnode.type === Fragment) {
             unmountChildren(vnode.children)
         } else if (shapeFlag & ShapeFlags.COMPONENT) {
@@ -556,7 +570,12 @@ export function createRenderer(renderOptions) {
         } else if(shapeFlag & ShapeFlags.TELEPORT) {
             vnode.type.remove(vnode, unmountChildren)
         } else {
-            hostRemove(vnode.el)
+            if (transition) {
+                transition.leave(el, performRemove)
+            } else {
+                performRemove()
+            }
+            
         }
     }
     // 多次调用render 会进行虚拟节点的比较在进行更新

@@ -41,7 +41,13 @@ export function defineAsyncComponent(options) {
             }
 
             retryLoading().then((component) => {
-                comp = component
+                console.log(component.__esModule, component[Symbol.toStringTag], component)
+                // 如果component是一个模块
+                if (component && (component.__esModule || component[Symbol.toStringTag] === "Module")) {
+                    comp = component.default
+                } else {
+                    comp = component
+                }
                 loaded.value = true
             }).catch((err) => {
                 error.value = err

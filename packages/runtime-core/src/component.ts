@@ -17,6 +17,7 @@ export function createComponentInstance (vnode, parent) {
         setupState: {},
         exposed: null,
         parent,
+        ctx: {} as any, // 如果是keepalive 组件就将domAPi 放入到这个属性上
         // 所有的组件 provide都一样
         provides: parent ? parent.provides : Object.create(null),
     }

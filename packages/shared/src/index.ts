@@ -14,6 +14,7 @@ export function isString(str) {
   return typeof str === 'string'
 }
 export * from './shapeFlags'
+export * from './patchFlags'
 
 const hasOwnProperty = Object.prototype.hasOwnProperty
 export function hasOwn(obj, key) {

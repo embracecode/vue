@@ -6,6 +6,7 @@ import { queueJob } from "./scheduler"
 import { createComponentInstance, setupComponent } from "./component"
 import { invokeLifeCycleHook } from "./apiLifecycle"
 import { isKeepAlive } from "./compoments/keepalive"
+import { PatchFlags } from "@vue/shared"
 
 
 export function createRenderer(renderOptions) {
@@ -23,9 +24,9 @@ export function createRenderer(renderOptions) {
         nextSibling: hostNextSibling
     } = renderOptions
     
-    const mountChildren = (children, container, parentComponent) => {
+    const mountChildren = (children, container,anchor, parentComponent) => {
         for (let i = 0; i < children.length; i++) {
-            patch(null, children[i], container, null, parentComponent)
+            patch(null, children[i], container, anchor, parentComponent)
         }
     }
     const mountElement = (vnode, container, anchor, parentComponent) => {
@@ -42,7 +43,7 @@ export function createRenderer(renderOptions) {
         if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
             hostSetElementText(el, children)
         } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) { // 儿子是个数组
-            mountChildren(children, el, parentComponent)
+            mountChildren(children, el, anchor, parentComponent)
         }
 
         if (transition) {
@@ -61,7 +62,7 @@ export function createRenderer(renderOptions) {
             mountElement(newVnode, container, anchor, parentComponent)
         } else {
             // 两个元素一样
-            patchElement(oldVnode, newVnode, container, parentComponent)
+            patchElement(oldVnode, newVnode, container, anchor,parentComponent)
         }
     }
     const patchProps = (oldProps, newProps, el) => {
@@ -183,7 +184,7 @@ export function createRenderer(renderOptions) {
 
         }
     }
-    const patchChildren = (oldVnode, newVnode, el, parentComponent) => {
+    const patchChildren = (oldVnode, newVnode, el, anchor, parentComponent) => {
         // text array null
         const c1 = oldVnode.children
         const c2 = newVnode.children
@@ -238,22 +239,51 @@ export function createRenderer(renderOptions) {
                 }
                 if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
                     // 6.老的是文本，新的是数组
-                    mountChildren(c2, el, parentComponent)
+                    mountChildren(c2, el, anchor, parentComponent)
                 }
             }
             
         }
     }
-    const patchElement = (oldVnode, newVnode, container, parentComponent) => {
+
+    const patchBlockChildren = (oldVnode, newVnode, el, anchor, parentComponent) => {
+        for(let i = 0; i < newVnode.dynamicChildren.length; i++) {
+            const oldDynamicChild = oldVnode.dynamicChildren[i]
+            const newDynamicChild = newVnode.dynamicChildren[i]
+            patch(oldDynamicChild, newDynamicChild, el, anchor, parentComponent)
+        }
+    }
+    const patchElement = (oldVnode, newVnode, container, anchor, parentComponent) => {
         // 1. 比较元素的差异  肯定需要复用dom
         // 2. 比较属性和元素的子节点
         let el = (newVnode.el = oldVnode.el) // 对dom的复用
         let oldProps = oldVnode.props || {}
         let newProps = newVnode.props || {}
-        // hostPatchProp 只针对某一个属性处理 class style on attr
-        patchProps(oldProps, newProps, el)
-        // 比较儿子节点
-        patchChildren(oldVnode, newVnode, el, parentComponent)
+
+        // 在比较元素的时候 针对某个属性来去比较
+        const { patchFlag, dynamicChildren } = newVnode
+        if (patchFlag) {
+            if (patchFlag & PatchFlags.STYLE) {
+                //  todo...
+            }
+            if (patchFlag & PatchFlags.TEXT) {
+            // 只要文本是动态的 只比较文本
+                if (oldVnode.children !== newVnode.children) {
+                    return hostSetElementText(el, newVnode.children)
+                }
+            }
+        } else {
+            // hostPatchProp 只针对某一个属性处理 class style on attr
+            patchProps(oldProps, newProps, el)
+        }
+        if (dynamicChildren) {// 靶向更新 线性比对
+            patchBlockChildren(oldVnode, newVnode, el, anchor, parentComponent)
+        } else {
+            // 比较儿子节点   全量比对儿子节点
+            patchChildren(oldVnode, newVnode, el, anchor, parentComponent)
+        }
+        
+        
         // 3. 比较文本
     }
     // 处理文本类型
@@ -272,13 +302,13 @@ export function createRenderer(renderOptions) {
         }
     }
     // 处理文档碎片
-    const processFragment = (oldVnode, newVnode, container, parentComponent) => {
+    const processFragment = (oldVnode, newVnode, container, anchor, parentComponent) => {
         if (oldVnode == null) {
             // 初始化操作
-            mountChildren(newVnode.children, container, parentComponent)
+            mountChildren(newVnode.children, container, anchor, parentComponent)
         } else {
             // 更新操作
-            patchChildren(oldVnode, newVnode, container, parentComponent)
+            patchChildren(oldVnode, newVnode, container, anchor, parentComponent)
         }
     }
     const updateComponentPreRender = (instance, next) => {
@@ -542,7 +572,7 @@ export function createRenderer(renderOptions) {
                 processText(oldVnode, newVnode, container)
                 break
             case Fragment:
-                processFragment(oldVnode, newVnode, container, parentComponent)
+                processFragment(oldVnode, newVnode, container, anchor,parentComponent)
                 break
             default:
                 if (shapeFlag & ShapeFlags.ELEMENT) {

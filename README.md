@@ -5,6 +5,9 @@
 ```
 .
 ├── packages
+│   ├── compiler-core
+│   │   ├── src
+│   │   │   ├── index.ts
 │   ├── reactivity
 │   │   ├── src
 │   │   │   ├── index.ts
@@ -14,33 +17,29 @@
 │   │   │   ├── reactive.ts
 │   │   ├── package.json
 │   │   └── README.md
+│   ├── runtime-core
+│   │   ├── src
+│   │   │   ├── index.ts
+│   ├── runtime-dom
+│   │   ├── src
+│   │   │   ├── index.ts
 │   ├── shared
 │   │   ├── src
 │   │   │   ├── index.ts
+│   │   │   ├── PatchFlages.ts
+│   │   │   ├── ShapFlahes.ts
+
 
 ```
-
+-   `compiler-core`：抽象语法树的转化 以及代码explorer   依赖于 #https://template-explorer.vuejs.org/ 编写
 -   `reactivity`：存放响应式模块的源码
+-   `runtime-core`：h函数及render函数的编写 以及dom diff算法
+-   `runtime-dom`：提供dom操作api 以及domdiff中用到的函数  依赖属性  // runtime-dom --> runtime-core ---> reactivity
 -   `shared`：存放共享模块的源码
 
-### 响应式模块
+### 响应式模块 reactivity
 
--   `effect`：实现依赖收集和自动派发
--   `ref`：实现响应式数据
--   `computed`：实现计算属性
--   `reactive`：实现响应式对象
 
-### 依赖收集
-
--   `effect`：通过`effect`函数包裹的函数，会被收集到依赖收集器中，并在函数执行时自动派发
--   `computed`：通过`computed`函数包裹的函数，会被收集到依赖收集器中，并在函数执行时自动派发
--   `reactive`：通过`reactive`函数包裹的对象，会被收集到依赖收集器中，并在对象属性被访问时自动派发
-
-### 自动派发
-
--   `effect`：在函数执行时，会自动收集依赖，并触发依赖收集器中的依赖，使得依赖函数重新执行
--   `computed`：在函数执行时，会自动收集依赖，并触发依赖收集器中的依赖，使得依赖函数重新执行
--   `reactive`：在对象属性被访问时，会自动收集依赖，并触发依赖收集器中的依赖，使得依赖函数重新执行
 
 ### 总结
 

@@ -1,3 +1,5 @@
+import { CREATE_ELEMENT_VNODE, CREATE_TEXT_VNODE, FRAGMENT } from "./runtimeHelper";
+
 export enum NodeTypes {
     ROOT = 0,
     ELEMENT = 1,
@@ -26,4 +28,40 @@ export enum NodeTypes {
     JS_ASSIGNMENT_EXPRESSION = 24,
     JS_SEQUENCE_EXPRESSION = 25,
     JS_RETURN_STATEMENT = 26
+}
+
+export function createCallExpression(context, args) {
+    let name = context.helper(CREATE_TEXT_VNODE)
+    return {
+        // createTextVnode
+        type: NodeTypes.JS_CALL_EXPRESSION,
+        arguments: args,
+        callee: name
+    }
+}
+
+
+export function createVnodeCall(context, tag, props, children) {
+    let name
+    if (tag !== FRAGMENT) {
+        name = context.helper(CREATE_ELEMENT_VNODE)
+    }
+    return {
+        // createElementVnode
+        type: NodeTypes.VNODE_CALL,
+        // arguments: [tag, props, children],
+        tag,
+        props, 
+        children,
+        callee: name ? name : null
+    }
+}
+
+export function createObjectExpression(properties) {
+
+    // {a:1,b:2,c:3}
+    return {
+        type: NodeTypes.JS_OBJECT_EXPRESSION,
+        properties
+    }
 }
